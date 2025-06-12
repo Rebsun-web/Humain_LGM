@@ -3,11 +3,12 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 import enum
-from config import config
+from lead_processing_manager.Configs.config import config
 
 Base = declarative_base()
 engine = create_engine(config.DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine)
+
 
 class LeadStatus(enum.Enum):
     NEW = "new"
@@ -19,10 +20,12 @@ class LeadStatus(enum.Enum):
     NOT_INTERESTED = "not_interested"
     FOLLOW_UP = "follow_up"
 
+
 class CommunicationChannel(enum.Enum):
     EMAIL = "email"
     WHATSAPP = "whatsapp"
     LINKEDIN = "linkedin"
+
 
 class Lead(Base):
     __tablename__ = "leads"
@@ -44,6 +47,7 @@ class Lead(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     custom_data = Column(JSON, default={})
 
+
 class Conversation(Base):
     __tablename__ = "conversations"
 
@@ -54,7 +58,8 @@ class Conversation(Base):
     message_content = Column(Text)
     timestamp = Column(DateTime, default=datetime.utcnow)
     read = Column(Boolean, default=False)
-    metadata = Column(JSON, default={})
+    message_metadata = Column(JSON, default={})
+
 
 class Meeting(Base):
     __tablename__ = "meetings"
@@ -68,5 +73,6 @@ class Meeting(Base):
     status = Column(String(50))  # 'proposed', 'confirmed', 'completed', 'cancelled'
     notes = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
+
 
 Base.metadata.create_all(engine)

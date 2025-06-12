@@ -5,11 +5,12 @@ import pickle
 import os
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
-from Configs.config import config
+from lead_processing_manager.Configs.config import config
 
 
 class CalendarHandler:
     SCOPES = ['https://www.googleapis.com/auth/calendar']
+    OAUTH_PORT = 8095  # Changed port to avoid conflicts
     
     def __init__(self):
         self.creds = self._get_credentials()
@@ -31,7 +32,11 @@ class CalendarHandler:
             else:
                 flow = InstalledAppFlow.from_client_secrets_file(
                     config.GOOGLE_CALENDAR_CREDENTIALS_PATH, self.SCOPES)
-                creds = flow.run_local_server(port=0)
+                creds = flow.run_local_server(
+                    port=self.OAUTH_PORT,
+                    success_message='The authentication flow has completed. You may close this window.',
+                    authorization_prompt_message='Please visit this URL to authorize this application: {url}'
+                )
             
             # Save the credentials for the next run
             with open('token.pickle', 'wb') as token:

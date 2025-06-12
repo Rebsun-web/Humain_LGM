@@ -1,17 +1,35 @@
 from telegram import Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CallbackQueryHandler, ContextTypes
 from datetime import datetime, timedelta
-from config import config
-from models import Lead
-from calendar_handler import CalendarHandler
+import asyncio
+from lead_processing_manager.Configs.config import config
+from lead_processing_manager.Models.models import Lead
+from lead_processing_manager.Views.calendar_handler import CalendarHandler
+
+
+# Standalone function to send notifications
+async def send_telegram_notification(message: str, reply_markup=None):
+    bot = TelegramBot()
+    await bot.send_message(message, reply_markup)
 
 
 class TelegramBot:
+    _instance = None
+    _initialized = False
+    _application = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(TelegramBot, cls).__new__(cls)
+        return cls._instance
+
     def __init__(self):
-        self.bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
-        self.group_chat_id = config.TELEGRAM_GROUP_CHAT_ID
-        self.calendar_handler = CalendarHandler()
-        self.pending_meetings = {}  # Store temporary meeting data
+        if not self._initialized:
+            self.bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
+            self.group_chat_id = config.TELEGRAM_GROUP_CHAT_ID
+            self.calendar_handler = CalendarHandler()
+            self.pending_meetings = {}  # Store temporary meeting data
+            self._initialized = True
     
     async def send_message(self, message: str, reply_markup=None):
         """Send message to the managers group"""
@@ -22,7 +40,31 @@ class TelegramBot:
             reply_markup=reply_markup
         )
     
-    async def notify_new_lead(self, lead: Lead):
+    async def cleanup(self):
+        """Clean up bot resources"""
+        if self._application:
+            try:
+                await self._application.stop()
+                await self._application.shutdown()
+                self._application = None
+            except Exception as e:
+                print(f"Error during bot cleanup: {e}")
+    
+    def setup_bot(self):
+        """Set up the Telegram bot application"""
+        # Clean up any existing application
+        if self._application:
+            asyncio.create_task(self.cleanup())
+        
+        # Create new application
+        self._application = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
+        
+        # Add handlers
+        self._application.add_handler(CallbackQueryHandler(self.handle_callback))
+        
+        return self._application
+    
+    async def notify_new_lead(self, lead: Lead, channels_used: str = None):
         """Notify managers about new lead"""
         message = f"""
 🆕 <b>New Lead Added</b>
@@ -33,7 +75,7 @@ class TelegramBot:
 <b>Phone:</b> {lead.phone_number or 'Not provided'}
 <b>Website:</b> {lead.company_website}
 
-Initial outreach will be sent automatically.
+Initial outreach sent via: {channels_used or 'No channels available'}
         """
         await self.send_message(message)
     
@@ -91,7 +133,6 @@ How would you like to proceed?
         
         await self.send_message(message, reply_markup)
     
-    # TODO: Implement the logic to change offsets
     async def show_time_slots(self, meeting_id: str, day_offset: int = 3):
         """Show available time slots for the next day_offset business days"""
         # Generate time slots
@@ -107,7 +148,6 @@ How would you like to proceed?
             
             day_name = date.strftime("%a %b %d")
             
-            # TODO: Implement the logic for managers to insert their time slots
             # Morning slots
             for hour in [9, 10, 11]:
                 slot_id = f"{meeting_id}:{date.strftime('%Y-%m-%d')}:{hour:02d}:00"
@@ -185,18 +225,24 @@ You'll be notified when they respond.
         # Clean up
         del self.pending_meetings[meeting_id]
     
-    def start_bot(self):
-        """Start the Telegram bot"""
-        application = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
+    async def whatsapp_stats_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Show WhatsApp usage statistics"""
+        stats = self.whatsapp_handler.get_usage_stats()
         
-        # Add handlers
-        application.add_handler(CallbackQueryHandler(self.handle_callback))
+        message = f"""
+    📱 <b>WhatsApp Usage Statistics</b>
+
+    <b>Daily Usage:</b>
+    - Sent: {stats['daily_count']}/{stats['daily_limit']}
+    - Remaining: {stats['daily_remaining']}
+
+    <b>Hourly Usage:</b>
+    - Sent: {stats['hourly_count']}/{stats['hourly_limit']}
+    - Remaining: {stats['hourly_remaining']}
+
+    <b>Total:</b>
+    - All-time sent: {stats['total_sent']}
+    - Can send now: {'✅ Yes' if stats['can_send'] else '❌ No'}
+        """
         
-        # Start the bot
-        application.run_polling()
-
-
-# Async function to send notifications (use from main app)
-async def send_telegram_notification(message: str, reply_markup=None):
-    bot = TelegramBot()
-    await bot.send_message(message, reply_markup)
+        await update.message.reply_text(message, parse_mode='HTML')
