@@ -8,8 +8,8 @@ from lead_processing_manager.Configs.config import Config
 class WhatsAppRateLimiter:
     def __init__(self):
         self.rate_file = "whatsapp_usage.json"
-        self.daily_limit = config.WHATSAPP_DAILY_LIMIT
-        self.hourly_limit = config.WHATSAPP_HOURLY_LIMIT
+        self.daily_limit = Config.WHATSAPP_DAILY_LIMIT
+        self.hourly_limit = Config.WHATSAPP_HOURLY_LIMIT
         self.usage_data = self._load_usage_data()
     
     def _load_usage_data(self) -> Dict[str, Any]:
@@ -80,16 +80,6 @@ class WhatsAppRateLimiter:
             return False, f"Hourly limit reached ({self.hourly_limit}). Resets in {60 - datetime.now().minute} minutes."
         
         return True, "OK"
-    
-    def record_message_sent(self):
-        """Record that a message was sent"""
-        self.usage_data['daily_count'] += 1
-        self.usage_data['hourly_count'] += 1
-        self.usage_data['total_sent'] += 1
-        self._save_usage_data()
-        
-        print(f"WhatsApp message sent. Daily: {self.usage_data['daily_count']}/{self.daily_limit}, "
-              f"Hourly: {self.usage_data['hourly_count']}/{self.hourly_limit}")
     
     def get_usage_stats(self) -> Dict[str, Any]:
         """Get current usage statistics"""

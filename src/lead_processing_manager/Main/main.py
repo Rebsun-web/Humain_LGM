@@ -1,11 +1,11 @@
 import asyncio
-import schedule
 import time
 import os
-import signal
 import sys
+import signal
+import schedule
 from datetime import datetime
-import threading
+from threading import Thread
 from flask import request
 from lead_processing_manager.Views.excel_handler import ExcelHandler
 from lead_processing_manager.Main.lead_processor import LeadProcessor
@@ -14,6 +14,9 @@ from lead_processing_manager.Models.models import (
     Lead, LeadStatus, SessionLocal
 )
 from lead_processing_manager.Configs.config import config
+from lead_processing_manager.Views.webhook_manager import WebhookManager
+from lead_processing_manager.Utils.db_utils import db_session
+from lead_processing_manager.Utils.logging_utils import setup_logger
 
 
 class LeadAutomationSystem:
@@ -21,7 +24,9 @@ class LeadAutomationSystem:
         self.excel_handler = ExcelHandler()
         self.lead_processor = LeadProcessor()
         self.telegram_bot = TelegramBot()
+        self.webhook_manager = WebhookManager(self.lead_processor)
         self.is_running = True
+        self.logger = setup_logger(__name__)
         self.cleanup_telegram_bot()  # Clean up any existing bot instances
         
         # Set up signal handlers
@@ -169,17 +174,52 @@ class LeadAutomationSystem:
             except Exception as e:
                 print(f"Error in main loop: {e}")
                 await asyncio.sleep(60)  # Wait 1 minute on error
+
+    def start_server(self, port: int = None):
+        """Start the webhook server"""
+        port = port or config.WHATSAPP_WEBHOOK_PORT or 8090
+        
+        def run_server():
+            try:
+                self.logger.info(f"Starting webhook server on port {port}")
+                self.webhook_manager.app.run(host='0.0.0.0', port=port, debug=False)
+            except OSError as e:
+                if "Address already in use" in str(e):
+                    # Try alternative ports
+                    for alt_port in range(port + 1, port + 10):
+                        try:
+                            self.logger.info(f"Port {port} in use, trying port {alt_port}")
+                            self.app.run(host='0.0.0.0', port=alt_port, debug=False)
+                            break
+                        except OSError:
+                            continue
+                else:
+                    self.logger.error(f"Failed to start webhook server: {e}")
+            except Exception as e:
+                self.logger.error(f"Failed to start webhook server: {e}")
+
+        Thread(target=run_server, daemon=True).start()
     
     def start(self):
         """Start the lead automation system"""
         print("Starting Lead Automation System...")
+        
+        # Start webhook server
+        self.start_server()
+        
         # Start Telegram bot in separate thread
-        telegram_thread = threading.Thread(target=self.run_telegram_bot)
+        telegram_thread = Thread(target=self.run_telegram_bot)
         telegram_thread.daemon = True
         telegram_thread.start()
-        # Schedule daily summary
-        schedule.every().day.at("09:00").do(
-            lambda: asyncio.create_task(self.daily_summary())
+        
+        # Schedule daily summary at 6 PM
+        schedule.every().day.at("18:00").do(
+            lambda: asyncio.create_task(self.telegram_bot.send_daily_lead_summary())
+        )
+        
+        # Schedule weekly summary on Fridays at 5 PM
+        schedule.every().friday.at("17:00").do(
+            lambda: asyncio.create_task(self.send_weekly_summary())
         )
         
         # Start scheduler in separate thread
@@ -187,15 +227,62 @@ class LeadAutomationSystem:
             while self.is_running:
                 schedule.run_pending()
                 time.sleep(60)
-        scheduler_thread = threading.Thread(target=run_scheduler)
+        scheduler_thread = Thread(target=run_scheduler)
         scheduler_thread.daemon = True
         scheduler_thread.start()
+        
         # Run main loop
         try:
             asyncio.run(self.main_loop())
         except KeyboardInterrupt:
             print("\nShutting down Lead Automation System...")
             self.is_running = False
+
+    async def send_weekly_summary(self):
+        """Send weekly summary to managers"""
+        try:
+            week_start = datetime.now().replace(hour=0, minute=0, second=0) - timedelta(days=7)
+            
+            with db_session() as db:
+                # Weekly stats
+                total_leads = db.query(Lead).filter(Lead.created_at >= week_start).count()
+                contacted_leads = db.query(Lead).filter(
+                    Lead.last_contact_date >= week_start,
+                    Lead.status.in_([LeadStatus.CONTACTED, LeadStatus.FOLLOW_UP])
+                ).count()
+                responded_leads = db.query(Lead).filter(
+                    Lead.status.in_([
+                        LeadStatus.RESPONDED, 
+                        LeadStatus.INTERESTED, 
+                        LeadStatus.MEETING_REQUESTED
+                    ])
+                ).count()
+                meetings_scheduled = db.query(Lead).filter(
+                    Lead.status.in_([
+                        LeadStatus.MEETING_SCHEDULED, 
+                        LeadStatus.MEETING_CONFIRMED
+                    ])
+                ).count()
+                
+                summary = f"""
+                    📈 <b>Weekly Summary</b>
+
+                    <b>This Week:</b>
+                    - New leads: {total_leads}
+                    - Leads contacted: {contacted_leads}
+                    - Leads responded: {responded_leads}
+                    - Meetings scheduled: {meetings_scheduled}
+
+                    <b>Conversion Rate:</b>
+                    - Response rate: {(responded_leads/contacted_leads*100):.1f}% 
+                    {'0.0%' if contacted_leads == 0 else f'{(responded_leads/contacted_leads*100):.1f}%'}
+                    - Meeting rate: {(meetings_scheduled/responded_leads*100):.1f}% 
+                    {'0.0%' if responded_leads == 0 else f'{(meetings_scheduled/responded_leads*100):.1f}%'}
+                """
+                await self.telegram_bot.send_message(summary)
+                
+        except Exception as e:
+            print(f"Error generating weekly summary: {e}")
 
 
 if __name__ == "__main__":

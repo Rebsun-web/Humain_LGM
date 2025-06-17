@@ -1,3 +1,4 @@
+# Models.py
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, Boolean, JSON, Enum
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -17,6 +18,7 @@ class LeadStatus(enum.Enum):
     INTERESTED = "interested"
     MEETING_REQUESTED = "meeting_requested"
     MEETING_SCHEDULED = "meeting_scheduled"
+    MEETING_CANCELED = "meeting_cancelled"
     NOT_INTERESTED = "not_interested"
     FOLLOW_UP = "follow_up"
 

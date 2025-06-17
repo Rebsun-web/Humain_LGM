@@ -57,9 +57,12 @@ class Config:
     WHATSAPP_API_URL: str = os.getenv("WHATSAPP_API_URL", "")
     WHATSAPP_API_TOKEN: str = os.getenv("WHATSAPP_API_TOKEN", "")
     WHATSAPP_PHONE_NUMBER_ID: str = os.getenv("WHATSAPP_PHONE_NUMBER_ID", "")
-    WHATSAPP_WEBHOOK_VERIFY_TOKEN: str = os.getenv("WHATSAPP_WEBHOOK_VERIFY_TOKEN", "")
     WHATSAPP_APP_SECRET: str = os.getenv("WHATSAPP_APP_SECRET", "")
+
+    WHATSAPP_WEBHOOK_VERIFY_TOKEN: str = os.getenv("WHATSAPP_WEBHOOK_VERIFY_TOKEN", "")
     WHATSAPP_WEBHOOK_PORT: int = get_env_int("WHATSAPP_WEBHOOK_PORT", 8090)
+    WHATSAPP_WEBHOOK_HOST: int = get_env_int("WHATSAPP_WEBHOOK_HOST", "0.0.0.0")
+    WHATSAPP_WEBHOOK_URL: str = os.getenv("WHATSAPP_WEBHOOK_URL", "")
 
     # WhatsApp Rate Limits
     WHATSAPP_DAILY_LIMIT = int(os.getenv("WHATSAPP_DAILY_LIMIT", "200"))
@@ -68,6 +71,11 @@ class Config:
     # Telegram
     TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
     TELEGRAM_GROUP_CHAT_ID: str = os.getenv("TELEGRAM_GROUP_CHAT_ID", "")
+    TELEGRAM_POOL_TIMEOUT = 30
+    TELEGRAM_CONNECT_TIMEOUT = 30
+    TELEGRAM_READ_TIMEOUT = 30
+    TELEGRAM_WRITE_TIMEOUT = 30
+    TELEGRAM_RETRY_ATTEMPTS = 2
 
     # Google Calendar
     GOOGLE_CALENDAR_CREDENTIALS_PATH: str = os.getenv(
@@ -78,8 +86,11 @@ class Config:
     # Database
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL",
-        "sqlite:///leads_automation.db"
+        "sqlite:///leads.db"
     )
+
+    SQLITE_BUSY_TIMEOUT = int(os.getenv('SQLITE_BUSY_TIMEOUT', '30000'))  # 30 seconds
+    SQLITE_JOURNAL_MODE = os.getenv('SQLITE_JOURNAL_MODE', 'WAL')
 
     # Excel file path
     LEADS_FILE: str = os.path.join('Secrets', 'leads.xlsx')
@@ -88,6 +99,15 @@ class Config:
     BUSINESS_START_HOUR: int = 0
     BUSINESS_END_HOUR: int = 24
     TIMEZONE: str = "Europe/Amsterdam"
+
+    # Meeting Configuration
+    MEETING_DURATION_MINUTES = 30
+    MEETING_BUFFER_MINUTES = 15  # Buffer between meetings
+    AUTO_APPROVE_EXACT_MATCHES = False  # Whether to auto-approve perfect calendar matches
+    REQUIRE_MANAGER_APPROVAL = True  # Always require manager approval
+
+    # Telegram Configuration
+    TELEGRAM_MEETING_TIMEOUT_HOURS = 24  # How long to wait for manager response
 
 
 config = Config()

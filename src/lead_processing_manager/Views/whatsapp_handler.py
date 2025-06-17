@@ -1,11 +1,11 @@
+# Whatsapp_Handler.py
+import hmac
+import hashlib
 import requests
 from typing import List, Dict, Tuple
 from datetime import datetime
 from flask import Flask, request, jsonify
-from threading import Thread
 from queue import Queue
-import hmac
-import hashlib
 from lead_processing_manager.Configs.config import config
 from lead_processing_manager.Models.models import Lead, Conversation, CommunicationChannel, SessionLocal
 from lead_processing_manager.Utils.rate_limiter import WhatsAppRateLimiter
@@ -27,7 +27,7 @@ class WhatsAppHandler(BaseCommunicationHandler):
         super().__init__()
         self.logger = setup_logger(__name__)
         self.test_mode = config.WHATSAPP_TEST_MODE
-        self.rate_limiter = config.WHATSAPP_RATE_LIMITER
+        self.rate_limiter = WhatsAppRateLimiter()
         self.channel = CommunicationChannel.WHATSAPP
         self.api_url = config.WHATSAPP_API_URL
         self.api_token = config.WHATSAPP_API_TOKEN
@@ -37,9 +37,6 @@ class WhatsAppHandler(BaseCommunicationHandler):
         
         # Queue for storing incoming messages
         self.message_queue = Queue()
-        
-        # Start webhook server
-        self.start_webhook_server()
 
         self.logger.info("WhatsAppHandler initialized")
 
@@ -196,96 +193,3 @@ class WhatsAppHandler(BaseCommunicationHandler):
         else:
             print(f"Failed to send WhatsApp to {lead.first_name} {lead.last_name}: {reason}")
             return False
-
-    def verify_webhook_signature(self, request_data: bytes, signature_header: str) -> bool:
-        """Verify that the webhook request came from WhatsApp"""
-        try:
-            # Get the SHA256 hash of the request body using your app secret
-            expected_signature = hmac.new(
-                self.app_secret.encode('utf-8'),
-                request_data,
-                hashlib.sha256
-            ).hexdigest()
-            
-            # Compare with the signature from the header
-            return hmac.compare_digest(signature_header, f"sha256={expected_signature}")
-        except Exception as e:
-            print(f"Error verifying webhook signature: {e}")
-            return False
-
-    def start_webhook_server(self):
-        """Start the Flask server for receiving webhooks"""
-        app = Flask(__name__)
-        
-        @app.route('/webhook/whatsapp', methods=['GET'])
-        def verify_webhook():
-            """Handle the webhook verification from WhatsApp"""
-            mode = request.args.get('hub.mode')
-            token = request.args.get('hub.verify_token')
-            challenge = request.args.get('hub.challenge')
-            
-            if mode and token:
-                if mode == 'subscribe' and token == self.webhook_verify_token:
-                    return challenge
-                return jsonify({'error': 'Invalid verification token'}), 403
-            return jsonify({'error': 'Invalid request'}), 400
-
-        @app.route('/webhook/whatsapp', methods=['POST'])
-        def receive_message():
-            """Handle incoming WhatsApp messages"""
-            # Verify the request signature
-            signature = request.headers.get('X-Hub-Signature-256')
-            if not signature or not self.verify_webhook_signature(request.get_data(), signature):
-                return jsonify({'error': 'Invalid signature'}), 403
-            
-            try:
-                data = request.get_json()
-                
-                # Process incoming WhatsApp message
-                messages_path = data.get('entry', [{}])[0]\
-                    .get('changes', [{}])[0]\
-                    .get('value', {}).get('messages', [])
-                
-                if messages_path:
-                    for message in messages_path:
-                        # Create WhatsAppMessage object
-                        whatsapp_message = WhatsAppMessage(
-                            from_number=message['from'],
-                            message_body=message['text']['body'],
-                            timestamp=datetime.fromtimestamp(
-                                int(message['timestamp'])
-                            ),
-                            message_id=message['id']
-                        )
-                        
-                        # Add to queue for processing
-                        self.message_queue.put(whatsapp_message)
-                
-                return jsonify({'status': 'ok'})
-                
-            except Exception as e:
-                print(f"Error processing webhook: {e}")
-                return jsonify({'error': 'Internal server error'}), 500
-
-        # Start the Flask server in a separate thread
-        def run_server():
-            try:
-                port = config.WHATSAPP_WEBHOOK_PORT
-                self.logger.info(f"Starting WhatsApp webhook server on port {port}")
-                app.run(host='0.0.0.0', port=port)
-            except OSError as e:
-                if "Address already in use" in str(e):
-                    # Try alternative ports
-                    for alt_port in range(port + 1, port + 10):
-                        try:
-                            self.logger.info(f"Port {port} in use, trying port {alt_port}")
-                            app.run(host='0.0.0.0', port=alt_port)
-                            break
-                        except OSError:
-                            continue
-                else:
-                    self.logger.error(f"Failed to start webhook server: {e}")
-            except Exception as e:
-                self.logger.error(f"Failed to start webhook server: {e}")
-        
-        Thread(target=run_server, daemon=True).start()

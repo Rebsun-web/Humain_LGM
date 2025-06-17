@@ -93,4 +93,4 @@ def log_function_call(logger: logging.Logger) -> Callable:
                 raise
         
         return async_wrapper if inspect.iscoroutinefunction(func) else sync_wrapper
-    return decorator 
+    return decorator

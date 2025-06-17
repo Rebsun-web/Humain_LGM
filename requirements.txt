@@ -1,15 +1,48 @@
 # requirements.txt
-numpy==1.24.3
-pandas==2.0.3
-openpyxl==3.1.2
-sqlalchemy==2.0.19
-openai==1.3.0
-python-telegram-bot==20.3
-google-api-python-client==2.95.0
-google-auth-httplib2==0.1.0
-google-auth-oauthlib==1.0.0
-requests==2.31.0
-python-dotenv==1.0.0
-schedule==1.2.0
-email-validator==2.0.0
-pytz==2023.3
+
+# Core Python libraries
+requests>=2.31.0
+python-dotenv>=1.0.0
+schedule>=1.2.0
+
+# Data handling
+numpy>=1.24.3
+pandas>=2.0.3
+openpyxl>=3.1.2
+
+# Database
+sqlalchemy>=2.0.19
+
+# Email validation
+email-validator>=2.0.0
+
+# Timezone support
+pytz>=2023.3
+
+# Flask for webhooks
+flask>=2.3.0
+
+# Telegram Bot
+python-telegram-bot>=20.3
+
+# Google Calendar API
+google-api-python-client>=2.95.0
+google-auth-httplib2>=0.1.0
+google-auth-oauthlib>=1.0.0
+
+# OpenAI GPT
+openai>=1.3.0
+httpx>=0.24.0
+
+# For process management in cleanup_telegram_bot
+psutil>=5.9.0
+
+# For typing support (Python 3.8+ has most, but for older versions)
+typing-extensions>=4.5.0
+
+# For colored logs (optional, if you want colored console output)
+colorlog>=6.7.0
+
+# For async support (if needed)
+aiohttp>=3.8.0
+
